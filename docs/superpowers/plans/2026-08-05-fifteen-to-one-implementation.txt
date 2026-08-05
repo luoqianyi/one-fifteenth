@@ -1,0 +1,1370 @@
+# 十五分之一实施计划
+
+> **执行代理必读：** 必须使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans，逐任务执行本计划。使用 `- [ ]` 复选框跟踪步骤。
+
+**目标：** 构建一个可直接部署到 GitHub Pages 的纯前端输入输出学习网站，支持多领域词库、AI 关键词建议、间隔重复抽卡、双阶段计时、本地录音、学习档案和 JSON 备份。
+
+**架构：** 应用采用原生 ES Modules 的单页架构。轻量偏好和活动计时器保存在 localStorage，领域、类目、关键词、训练记录和录音保存在 IndexedDB；纯函数核心用 Node 内置测试，浏览器集成流程用 Playwright 验证。
+
+**技术栈：** HTML5、CSS3、原生 JavaScript、IndexedDB、MediaRecorder、Web Notifications、OpenAI 兼容 Chat Completions API、Node test runner、Playwright。
+
+---
+
+## 文件结构
+
+```text
+fifteen-to-one/
+├── .gitignore                         # 忽略依赖、测试报告和本地临时文件
+├── index.html                         # SPA 外壳、导航、视图挂载点和全局弹层
+├── package.json                       # 仅包含测试与本地预览脚本
+├── playwright.config.js               # 端到端测试配置
+├── assets/
+│   └── favicon.svg                    # 纸张索引卡风格站点图标
+├── styles/
+│   ├── tokens.css                     # 色彩、字体、间距、阴影、动效变量
+│   ├── base.css                       # 重置、排版、可访问性和纸张背景
+│   ├── layout.css                     # 桌面侧栏、主内容、移动底栏布局
+│   ├── components.css                 # 卡片、按钮、表单、计时器、弹层组件
+│   └── responsive.css                 # 手机、窄屏和减少动效适配
+├── scripts/
+│   ├── app.js                         # 启动、路由、共享状态和视图协调
+│   ├── storage.js                     # IndexedDB 初始化与事务封装
+│   ├── repository.js                  # 领域、类目、关键词、训练和录音仓储
+│   ├── core/
+│   │   ├── ai.js                      # 请求构造、响应解析、校验和去重
+│   │   ├── scheduler.js               # 抽卡权重和加权随机选择
+│   │   ├── timer.js                   # 可持久化双阶段计时状态机
+│   │   └── backup.js                  # 备份构造、校验、编码和导入映射
+│   ├── services/
+│   │   ├── recorder.js                # MediaRecorder 生命周期和 Blob 输出
+│   │   ├── notifier.js                # 提示音与浏览器通知
+│   │   └── preferences.js             # localStorage 配置读写和敏感项过滤
+│   ├── ui/
+│   │   ├── icons.js                   # 内嵌 SVG 图标工厂
+│   │   ├── dialog.js                  # 确认框、提示框和 Toast
+│   │   └── form.js                    # 表单取值、错误显示和禁用态工具
+│   └── views/
+│       ├── draw.js                    # 抽卡首页
+│       ├── focus.js                   # 学习、演讲、录音和复盘流程
+│       ├── library.js                 # 领域、类目、词库和 AI 候选管理
+│       ├── history.js                 # 学习档案、筛选和录音回放
+│       └── settings.js                # API、通知和导入导出设置
+└── tests/
+    ├── unit/
+    │   ├── ai.test.js                 # AI JSON 清理、校验和去重
+    │   ├── scheduler.test.js           # 权重计算和随机边界
+    │   ├── timer.test.js               # 计时暂停、恢复和刷新校准
+    │   └── backup.test.js              # 备份版本和数据校验
+    └── e2e/
+        ├── onboarding.spec.js          # 首次使用与手动建库
+        ├── learning-flow.spec.js       # 抽卡、计时、复盘、历史
+        ├── ai-settings.spec.js         # API 设置和模拟建议
+        └── backup.spec.js              # 导出、覆盖与损坏文件拦截
+```
+
+## 约定接口
+
+```js
+// Domain
+{ id, name, createdAt, updatedAt }
+
+// Category
+{ id, domainId, name, createdAt, updatedAt }
+
+// Keyword
+{
+  id, domainId, categoryId, name, level, summary,
+  studyCount, mastery, lastStudiedAt, lastDrawnAt,
+  skipCount, createdAt, updatedAt
+}
+
+// Session
+{
+  id, keywordId, domainId, categoryId,
+  keywordSnapshot, categorySnapshot, domainSnapshot,
+  learningDurationMs, speakingDurationMs,
+  notes, understanding, mastery, recordingId,
+  completedAt
+}
+
+// TimerState
+{
+  phase: "learning" | "speaking",
+  status: "idle" | "running" | "paused" | "finished",
+  durationMs, remainingMs, targetEndAt, keywordId
+}
+```
+
+---
+
+### Task 1：建立静态应用外壳和测试基线
+
+**文件：**
+- 创建：`.gitignore`
+- 创建：`package.json`
+- 创建：`playwright.config.js`
+- 创建：`index.html`
+- 创建：`scripts/app.js`
+- 创建：`styles/tokens.css`
+- 创建：`styles/base.css`
+- 创建：`styles/layout.css`
+- 创建：`styles/components.css`
+- 创建：`styles/responsive.css`
+- 创建：`assets/favicon.svg`
+- 测试：`tests/e2e/onboarding.spec.js`
+
+- [ ] **步骤 1：创建测试配置和失败的应用壳测试**
+
+`package.json`：
+
+```json
+{
+  "name": "fifteen-to-one",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e",
+    "serve": "python -m http.server 4173"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}
+```
+
+`playwright.config.js`：
+
+```js
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  use: { baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure' },
+  webServer: {
+    command: 'python -m http.server 4173 --bind 127.0.0.1',
+    url: 'http://127.0.0.1:4173',
+    reuseExistingServer: true
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile', use: { ...devices['Pixel 7'] } }
+  ]
+});
+```
+
+`tests/e2e/onboarding.spec.js`：
+
+```js
+import { test, expect } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    localStorage.clear();
+    await indexedDB.deleteDatabase('fifteen-to-one');
+  });
+  await page.reload();
+});
+
+test('首次访问显示品牌、导航和开始引导', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: '十五分之一' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '创建第一个领域' })).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：安装依赖并确认测试失败**
+
+运行：`npm install && npx playwright install chromium && npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：测试失败，原因是 `index.html` 或目标标题不存在。
+
+- [ ] **步骤 3：实现语义化应用外壳**
+
+`index.html` 必须包含：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4efe4">
+  <meta name="description" content="十五分钟输入，一分钟输出。">
+  <title>十五分之一</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles/tokens.css">
+  <link rel="stylesheet" href="./styles/base.css">
+  <link rel="stylesheet" href="./styles/layout.css">
+  <link rel="stylesheet" href="./styles/components.css">
+  <link rel="stylesheet" href="./styles/responsive.css">
+</head>
+<body>
+  <a class="skip-link" href="#app-view">跳到主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#draw" aria-label="十五分之一首页">
+        <span class="brand-mark" aria-hidden="true">15/1</span>
+        <span><strong>十五分之一</strong><small>输入 · 输出 · 内化</small></span>
+      </a>
+      <nav aria-label="主导航" id="main-nav"></nav>
+      <p class="method-note">十五分钟输入<br>一分钟输出</p>
+    </aside>
+    <main id="app-view" tabindex="-1"></main>
+    <div id="floating-timer" hidden></div>
+  </div>
+  <div id="dialog-root"></div>
+  <div id="toast-root" role="status" aria-live="polite"></div>
+  <script type="module" src="./scripts/app.js"></script>
+</body>
+</html>
+```
+
+`scripts/app.js` 首版渲染五项导航和空状态：
+
+```js
+const routes = [
+  ['draw', '抽取'], ['focus', '专注'], ['library', '领域'],
+  ['history', '档案'], ['settings', '设置']
+];
+
+const nav = document.querySelector('#main-nav');
+const view = document.querySelector('#app-view');
+
+function renderNav(active) {
+  nav.innerHTML = routes.map(([route, label]) =>
+    `<a href="#${route}" data-route="${route}" aria-current="${route === active ? 'page' : 'false'}">${label}</a>`
+  ).join('');
+}
+
+function render() {
+  const route = location.hash.slice(1) || 'draw';
+  renderNav(route);
+  view.innerHTML = route === 'draw'
+    ? `<section class="empty-state"><p class="eyebrow">从一个领域开始</p><h1>十五分之一</h1><p>建立词库，抽取今天要讲明白的概念。</p><button class="button primary" data-action="create-domain">创建第一个领域</button></section>`
+    : `<section><h1>${routes.find(([key]) => key === route)?.[1] ?? '抽取'}</h1></section>`;
+}
+
+addEventListener('hashchange', render);
+render();
+```
+
+样式首版定义暖米白背景、深墨文字、暖橙主色、左侧栏和移动底栏；所有颜色从 `tokens.css` 变量读取，`base.css` 提供 `:focus-visible` 和 `.skip-link`。
+
+- [ ] **步骤 4：确认应用壳测试通过**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：1 个测试通过。
+
+- [ ] **步骤 5：提交基础外壳**
+
+```bash
+git add .gitignore package.json package-lock.json playwright.config.js index.html assets styles scripts/app.js tests/e2e/onboarding.spec.js
+git commit -m "feat: establish static learning app shell"
+```
+
+---
+
+### Task 2：实现 IndexedDB、偏好设置与仓储接口
+
+**文件：**
+- 创建：`scripts/storage.js`
+- 创建：`scripts/repository.js`
+- 创建：`scripts/services/preferences.js`
+- 修改：`scripts/app.js`
+- 测试：`tests/e2e/onboarding.spec.js`
+
+- [ ] **步骤 1：增加失败的持久化测试**
+
+在 `tests/e2e/onboarding.spec.js` 增加：
+
+```js
+test('创建领域后刷新页面仍保留', async ({ page }) => {
+  await page.getByRole('button', { name: '创建第一个领域' }).click();
+  await page.getByLabel('领域名称').fill('经济学');
+  await page.getByRole('button', { name: '保存领域' }).click();
+  await page.reload();
+  await expect(page.getByText('经济学')).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：运行并确认失败**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：新增测试因创建领域表单不存在而失败。
+
+- [ ] **步骤 3：实现数据库和仓储**
+
+`scripts/storage.js` 对外接口固定为：
+
+```js
+export const DB_NAME = 'fifteen-to-one';
+export const DB_VERSION = 1;
+export const STORES = ['domains', 'categories', 'keywords', 'sessions', 'recordings'];
+
+export function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function addIndex(store, name) {
+  if (!store.indexNames.contains(name)) store.createIndex(name, name, { unique: false });
+}
+
+export function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const transaction = request.transaction;
+      const getStore = name => db.objectStoreNames.contains(name)
+        ? transaction.objectStore(name)
+        : db.createObjectStore(name, { keyPath: 'id' });
+      getStore('domains');
+      const categories = getStore('categories');
+      addIndex(categories, 'domainId');
+      const keywords = getStore('keywords');
+      ['domainId', 'categoryId', 'lastStudiedAt'].forEach(name => addIndex(keywords, name));
+      const sessions = getStore('sessions');
+      ['keywordId', 'domainId', 'completedAt'].forEach(name => addIndex(sessions, name));
+      const recordings = getStore('recordings');
+      addIndex(recordings, 'sessionId');
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('数据库升级被其他页面阻止'));
+  });
+}
+
+export async function withStore(storeNames, mode, operation) {
+  const db = await openDatabase();
+  const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(names, mode);
+    const stores = Object.fromEntries(names.map(name => [name, transaction.objectStore(name)]));
+    let result;
+    try {
+      result = operation(names.length === 1 ? stores[names[0]] : stores, transaction);
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+      return;
+    }
+    transaction.oncomplete = async () => {
+      try { resolve(await result); } catch (error) { reject(error); } finally { db.close(); }
+    };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('数据库事务已取消')); };
+  });
+}
+```
+
+对象仓储使用 `keyPath: 'id'`。索引：categories 建 `domainId`；keywords 建 `domainId`、`categoryId`、`lastStudiedAt`；sessions 建 `keywordId`、`domainId`、`completedAt`；recordings 建 `sessionId`。
+
+`scripts/repository.js` 对外实现：
+
+```js
+export const repository = {
+  list(storeName), get(storeName, id), put(storeName, value),
+  remove(storeName, id), getByIndex(storeName, indexName, value),
+  createDomain(name), createCategory(domainId, name), createKeyword(input),
+  saveSession(session, recordingBlob), deleteDomain(domainId, recordingPolicy),
+  clearAll()
+};
+```
+
+所有 ID 使用 `crypto.randomUUID()`，时间使用 ISO 字符串。`saveSession` 在同一读写事务中写 session、可选 recording 并更新 keyword 的 `studyCount`、`mastery` 和 `lastStudiedAt`。
+
+`scripts/services/preferences.js`：
+
+```js
+const KEY = 'fifteen-to-one:preferences';
+const defaults = {
+  activeDomainId: 'all', apiBaseUrl: 'https://api.openai.com/v1',
+  apiKey: '', apiModel: 'gpt-4.1-mini', soundEnabled: true,
+  notificationsEnabled: false
+};
+
+export function loadPreferences() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return { ...defaults, ...stored };
+  } catch {
+    return { ...defaults };
+  }
+}
+
+export function savePreferences(patch) {
+  const next = { ...loadPreferences(), ...patch };
+  localStorage.setItem(KEY, JSON.stringify(next));
+  return next;
+}
+
+export function exportSafePreferences() {
+  const { apiKey, ...safe } = loadPreferences();
+  return safe;
+}
+```
+
+- [ ] **步骤 4：接入创建领域弹层并验证刷新持久化**
+
+在 `scripts/app.js` 启动时等待 `openDatabase()`，创建领域按钮打开原生 `<dialog>`，提交后调用 `repository.createDomain(name.trim())`，空名称显示字段错误。抽取视图列出已有领域。
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：2 个测试通过。
+
+- [ ] **步骤 5：提交存储层**
+
+```bash
+git add scripts/storage.js scripts/repository.js scripts/services/preferences.js scripts/app.js tests/e2e/onboarding.spec.js
+git commit -m "feat: persist learning data in browser storage"
+```
+
+---
+
+### Task 3：实现领域、类目和手动关键词管理
+
+**文件：**
+- 创建：`scripts/ui/icons.js`
+- 创建：`scripts/ui/dialog.js`
+- 创建：`scripts/ui/form.js`
+- 创建：`scripts/views/library.js`
+- 修改：`scripts/app.js`
+- 修改：`styles/components.css`
+- 测试：`tests/e2e/onboarding.spec.js`
+
+- [ ] **步骤 1：编写失败的词库管理测试**
+
+```js
+test('可创建领域、类目和手动关键词', async ({ page }) => {
+  await page.getByRole('button', { name: '创建第一个领域' }).click();
+  await page.getByLabel('领域名称').fill('经济学');
+  await page.getByRole('button', { name: '保存领域' }).click();
+  await page.getByRole('link', { name: '领域' }).click();
+  await page.getByRole('button', { name: '添加类目' }).click();
+  await page.getByLabel('类目名称').fill('宏观经济学');
+  await page.getByRole('button', { name: '保存类目' }).click();
+  await page.getByRole('button', { name: '手动添加关键词' }).click();
+  await page.getByLabel('关键词').fill('机会成本');
+  await page.getByLabel('难度').selectOption('beginner');
+  await page.getByLabel('一句简介').fill('选择一种方案时放弃的最佳替代方案的价值。');
+  await page.getByRole('button', { name: '保存关键词' }).click();
+  await expect(page.getByRole('heading', { name: '机会成本' })).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：运行并确认失败**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：领域管理视图或添加类目按钮不存在。
+
+- [ ] **步骤 3：实现词库视图和安全渲染**
+
+`library.js` 不使用字符串插入用户内容，统一用 `textContent`。它必须导出 `renderLibrary(container, context)`、`openDomainDialog(context, domain = null)`、`openCategoryDialog(context, category = null)` 和 `openKeywordDialog(context, keyword = null)`。前三个弹层函数负责填充原值、验证字段、调用仓储并在成功后重新执行 `renderLibrary`。
+
+界面结构：左栏领域列表，中栏类目列表，右栏关键词卡片。窄屏依次堆叠。关键词字段规则：名称 1–80 字，简介 0–240 字，level 仅允许 `beginner`、`advanced`、`comprehensive`。
+
+`dialog.js` 必须导出 `openDialog({ title, content, confirmLabel, onConfirm })`、`confirmDialog({ title, message, confirmLabel, danger })` 和 `showToast(message, type = 'info')`。`openDialog` 创建并显示原生 `<dialog>`，提交时等待 `onConfirm`；只有回调成功才关闭。`confirmDialog` 返回 `Promise<boolean>`；`showToast` 写入 `#toast-root`，4 秒后移除。
+
+删除领域或类目前查询受影响数量并二次确认；训练历史快照保留，当前词库级联删除。
+
+- [ ] **步骤 4：运行管理流程测试**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：3 个测试通过，控制台无异常。
+
+- [ ] **步骤 5：提交词库管理**
+
+```bash
+git add scripts/ui scripts/views/library.js scripts/app.js styles/components.css tests/e2e/onboarding.spec.js
+git commit -m "feat: manage domains categories and keywords"
+```
+
+---
+
+### Task 4：实现 OpenAI 兼容关键词建议
+
+**文件：**
+- 创建：`scripts/core/ai.js`
+- 修改：`scripts/views/library.js`
+- 创建：`scripts/views/settings.js`
+- 修改：`scripts/app.js`
+- 测试：`tests/unit/ai.test.js`
+- 测试：`tests/e2e/ai-settings.spec.js`
+
+- [ ] **步骤 1：编写 AI 解析失败测试**
+
+`tests/unit/ai.test.js`：
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parseSuggestions, removeDuplicateSuggestions } from '../../scripts/core/ai.js';
+
+test('解析代码围栏中的合法候选', () => {
+  const text = '```json\n{"suggestions":[{"name":"机会成本","level":"beginner","summary":"放弃的最佳替代价值"}]}\n```';
+  assert.deepEqual(parseSuggestions(text), [
+    { name: '机会成本', level: 'beginner', summary: '放弃的最佳替代价值' }
+  ]);
+});
+
+test('拒绝未知难度和空名称', () => {
+  const text = JSON.stringify({ suggestions: [
+    { name: '', level: 'beginner', summary: 'x' },
+    { name: '需求弹性', level: 'expert', summary: 'x' }
+  ] });
+  assert.throws(() => parseSuggestions(text), /没有有效的关键词/);
+});
+
+test('按标准化名称去重', () => {
+  const input = [{ name: ' 机会成本 ', level: 'beginner', summary: 'a' }];
+  assert.deepEqual(removeDuplicateSuggestions(input, ['机会成本']), []);
+});
+```
+
+- [ ] **步骤 2：确认单元测试失败**
+
+运行：`npm test -- tests/unit/ai.test.js`
+
+预期：失败并提示无法找到 `scripts/core/ai.js`。
+
+- [ ] **步骤 3：实现 AI 核心模块**
+
+`scripts/core/ai.js` 导出：
+
+```js
+const LEVELS = new Set(['beginner', 'advanced', 'comprehensive']);
+
+export function normalizeName(value) {
+  return String(value).trim().replace(/\s+/g, ' ').toLocaleLowerCase('zh-CN');
+}
+
+export function parseSuggestions(content) {
+  const clean = String(content).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('AI 未返回可解析的 JSON');
+  const parsed = JSON.parse(clean.slice(start, end + 1));
+  const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+  const valid = suggestions.flatMap(item => {
+    const name = typeof item?.name === 'string' ? item.name.trim().slice(0, 80) : '';
+    const summary = typeof item?.summary === 'string' ? item.summary.trim().slice(0, 240) : '';
+    return name && LEVELS.has(item?.level) ? [{ name, level: item.level, summary }] : [];
+  });
+  if (!valid.length) throw new Error('没有有效的关键词');
+  return valid;
+}
+
+export function removeDuplicateSuggestions(suggestions, existingNames) {
+  const seen = new Set(existingNames.map(normalizeName));
+  return suggestions.filter(item => {
+    const key = normalizeName(item.name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function buildSuggestionMessages({ domain, category, count }) {
+  return [
+    {
+      role: 'system',
+      content: '你是学习课程设计师。只输出合法 JSON，不要代码围栏或解释。难度只能是 beginner、advanced、comprehensive。'
+    },
+    {
+      role: 'user',
+      content: `为学习领域“${domain}”的类目“${category}”生成 ${count} 个值得学习的关键词。输出格式：{"suggestions":[{"name":"关键词","level":"beginner","summary":"不超过80字的简介"}]}`
+    }
+  ];
+}
+
+function endpoint(baseUrl) {
+  return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
+}
+
+export async function requestSuggestions(config, input, signal) {
+  try {
+    const response = await fetch(endpoint(config.apiBaseUrl), {
+      method: 'POST',
+      signal,
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.apiModel,
+        temperature: 0.4,
+        messages: buildSuggestionMessages(input)
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body?.error?.message || `AI 接口返回 HTTP ${response.status}`);
+    }
+    const content = body?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') throw new Error('AI 响应缺少文本内容');
+    return parseSuggestions(content);
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error('跨域或网络连接失败，请检查接口是否允许浏览器直连');
+    throw error;
+  }
+}
+
+export async function testConnection(config, signal) {
+  const suggestions = await requestSuggestions(config, {
+    domain: '测试', category: '连接测试', count: 1
+  }, signal);
+  return `连接成功，模型返回 ${suggestions.length} 条结果`;
+}
+```
+
+`requestSuggestions` 将 `apiBaseUrl` 去掉末尾斜杠后拼接 `/chat/completions`，请求头使用配置中的 API Key 构造 Bearer Authorization，并设置 `Content-Type: application/json`。请求体包含 `model`、`temperature: 0.4`、`messages`，提示输出：
+
+```json
+{"suggestions":[{"name":"关键词","level":"beginner","summary":"不超过80字的简介"}]}
+```
+
+HTTP 非 2xx 时读取错误消息但不回显 API Key；`TypeError: Failed to fetch` 映射为含“跨域或网络连接失败”的错误。
+
+- [ ] **步骤 4：实现设置和候选勾选界面**
+
+设置页包含 Base URL、API Key 密码框、模型名、显示/隐藏 Key 和连接测试。Key 下方固定显示：“此网站为纯前端应用，密钥会保存在当前浏览器中。请使用有限额、可撤销的专用密钥。”
+
+词库页“AI 建议关键词”弹层要求选择类目、数量 5–30；结果按三个难度分组，每项默认勾选并可编辑。点击“加入已选关键词”前再次去重，再调用 `repository.createKeyword`。
+
+- [ ] **步骤 5：用 Playwright 拦截接口验证完整流程**
+
+`tests/e2e/ai-settings.spec.js` 拦截 `**/chat/completions` 并返回：
+
+```js
+await page.route('**/chat/completions', route => route.fulfill({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+    suggestions: [
+      { name: '边际效用', level: 'beginner', summary: '新增一单位消费带来的效用变化' },
+      { name: '流动性陷阱', level: 'advanced', summary: '利率极低时货币政策效力减弱' }
+    ]
+  }) } }] })
+}));
+```
+
+验证保存设置、生成候选、取消一项、加入另一项以及重复词不再次加入。
+
+运行：`npm test && npm run test:e2e -- --project=chromium tests/e2e/ai-settings.spec.js`
+
+预期：全部通过。
+
+- [ ] **步骤 6：提交 AI 建议功能**
+
+```bash
+git add scripts/core/ai.js scripts/views/library.js scripts/views/settings.js scripts/app.js tests/unit/ai.test.js tests/e2e/ai-settings.spec.js
+git commit -m "feat: generate curated keywords with compatible AI APIs"
+```
+
+---
+
+### Task 5：实现间隔重复抽卡
+
+**文件：**
+- 创建：`scripts/core/scheduler.js`
+- 创建：`scripts/views/draw.js`
+- 修改：`scripts/app.js`
+- 修改：`scripts/repository.js`
+- 测试：`tests/unit/scheduler.test.js`
+- 测试：`tests/e2e/learning-flow.spec.js`
+
+- [ ] **步骤 1：编写权重与随机边界测试**
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { calculateWeight, chooseWeighted } from '../../scripts/core/scheduler.js';
+
+const now = Date.parse('2026-08-05T12:00:00Z');
+
+test('未学习关键词权重大于刚掌握的关键词', () => {
+  const fresh = { studyCount: 0, mastery: 0, lastStudiedAt: null, lastDrawnAt: null, skipCount: 0 };
+  const mastered = { studyCount: 3, mastery: 5, lastStudiedAt: '2026-08-05T11:00:00Z', lastDrawnAt: null, skipCount: 0 };
+  assert.ok(calculateWeight(fresh, now) > calculateWeight(mastered, now));
+});
+
+test('固定随机值选择正确权重区间', () => {
+  const items = [{ id: 'a', weight: 1 }, { id: 'b', weight: 3 }];
+  assert.equal(chooseWeighted(items, () => 0).id, 'a');
+  assert.equal(chooseWeighted(items, () => 0.99).id, 'b');
+});
+
+test('空列表返回 null', () => {
+  assert.equal(chooseWeighted([], () => 0.5), null);
+});
+```
+
+- [ ] **步骤 2：确认测试失败**
+
+运行：`npm test -- tests/unit/scheduler.test.js`
+
+预期：模块不存在。
+
+- [ ] **步骤 3：实现调度算法**
+
+```js
+export function calculateWeight(keyword, now = Date.now()) {
+  if (!keyword.studyCount) return 12;
+  const hours = Math.max(0, now - Date.parse(keyword.lastStudiedAt)) / 3_600_000;
+  const spacing = Math.min(8, 1 + Math.log2(1 + hours / 24));
+  const mastery = Math.max(1, 6 - Number(keyword.mastery || 0));
+  const recentDrawPenalty = keyword.lastDrawnAt && now - Date.parse(keyword.lastDrawnAt) < 3_600_000 ? 0.2 : 1;
+  const skipPenalty = Math.max(0.6, 1 - Number(keyword.skipCount || 0) * 0.05);
+  return Math.max(0.1, spacing * mastery * recentDrawPenalty * skipPenalty);
+}
+
+export function chooseWeighted(weightedItems, random = Math.random) {
+  if (!weightedItems.length) return null;
+  const total = weightedItems.reduce((sum, item) => sum + item.weight, 0);
+  let point = random() * total;
+  for (const item of weightedItems) {
+    point -= item.weight;
+    if (point <= 0) return item;
+  }
+  return weightedItems.at(-1);
+}
+
+export function drawKeyword(keywords, random = Math.random, now = Date.now()) {
+  return chooseWeighted(keywords.map(keyword => ({
+    ...keyword, weight: calculateWeight(keyword, now)
+  })), random);
+}
+```
+
+- [ ] **步骤 4：实现抽卡视图**
+
+抽卡页包含领域筛选、当前词库数量、大型索引卡、“抽取关键词”“换一张”“开始 15 分钟”按钮。抽取后立即更新 `lastDrawnAt`；换一张只增加 `skipCount`，不增加 `studyCount`。无关键词时显示“前往领域管理”。卡片翻面仅改变展示状态，不改变学习统计。
+
+- [ ] **步骤 5：验证抽卡流程**
+
+`learning-flow.spec.js` 预置 3 个关键词，通过 UI 连续抽卡，断言卡片包含名称、类目、难度和简介，并验证“开始 15 分钟”进入专注页。
+
+运行：`npm test && npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：单元与抽卡流程均通过。
+
+- [ ] **步骤 6：提交抽卡功能**
+
+```bash
+git add scripts/core/scheduler.js scripts/views/draw.js scripts/app.js scripts/repository.js tests/unit/scheduler.test.js tests/e2e/learning-flow.spec.js
+git commit -m "feat: draw learning cards with spaced repetition"
+```
+
+---
+
+### Task 6：实现可恢复的双阶段计时器与通知
+
+**文件：**
+- 创建：`scripts/core/timer.js`
+- 创建：`scripts/services/notifier.js`
+- 创建：`scripts/views/focus.js`
+- 修改：`scripts/app.js`
+- 修改：`styles/components.css`
+- 测试：`tests/unit/timer.test.js`
+- 测试：`tests/e2e/learning-flow.spec.js`
+
+- [ ] **步骤 1：编写计时状态机测试**
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createTimer, startTimer, pauseTimer, restoreTimer, switchPhase } from '../../scripts/core/timer.js';
+
+test('运行、刷新恢复和暂停使用真实结束时间', () => {
+  const idle = createTimer('learning', 'kw-1');
+  const running = startTimer(idle, 1_000);
+  assert.equal(running.targetEndAt, 1_000 + 15 * 60_000);
+  const restored = restoreTimer(running, 61_000);
+  assert.equal(restored.remainingMs, 14 * 60_000);
+  const paused = pauseTimer(restored, 61_000);
+  assert.equal(paused.status, 'paused');
+  assert.equal(paused.targetEndAt, null);
+});
+
+test('切换到演讲阶段使用一分钟', () => {
+  const speaking = switchPhase(createTimer('learning', 'kw-1'), 'speaking');
+  assert.equal(speaking.durationMs, 60_000);
+  assert.equal(speaking.remainingMs, 60_000);
+});
+```
+
+- [ ] **步骤 2：确认测试失败**
+
+运行：`npm test -- tests/unit/timer.test.js`
+
+预期：timer 模块不存在。
+
+- [ ] **步骤 3：实现纯计时状态机**
+
+`scripts/core/timer.js` 导出 `PHASE_DURATION`、`createTimer`、`startTimer`、`pauseTimer`、`resetTimer`、`restoreTimer`、`switchPhase`。`restoreTimer` 在剩余时间小于等于 0 时返回 `status: 'finished'`、`remainingMs: 0`。
+
+状态写入 localStorage 键 `fifteen-to-one:timer`。UI 每 250ms 更新一次，但所有显示值都由 `restoreTimer(state, Date.now())` 计算，禁止用递减计数作为真实状态。
+
+- [ ] **步骤 4：实现专注页和全局悬浮计时条**
+
+专注页显示关键词、阶段切换、圆环、`MM:SS`、开始/暂停/恢复/重置。切换阶段前若当前正在运行则确认。`visibilitychange`、`focus` 和页面初始化时校准状态。离开专注页时，全局悬浮条显示阶段、剩余时间和返回按钮。
+
+`notifier.js` 使用 Web Audio API 合成短提示音，不加载远程音频；仅在用户开启通知后调用 `Notification.requestPermission()`。计时完成时播放声音并在权限为 granted 时发出通知。
+
+- [ ] **步骤 5：验证计时刷新恢复**
+
+Playwright 使用 `page.clock.install()` 和 `page.clock.fastForward()`：开始学习计时，快进 65 秒，刷新，断言显示 `13:55`；暂停后再快进 30 秒，断言显示不变；切换演讲阶段断言 `01:00`。
+
+运行：`npm test && npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：全部通过。
+
+- [ ] **步骤 6：提交计时功能**
+
+```bash
+git add scripts/core/timer.js scripts/services/notifier.js scripts/views/focus.js scripts/app.js styles/components.css tests/unit/timer.test.js tests/e2e/learning-flow.spec.js
+git commit -m "feat: add resilient learning and speaking timers"
+```
+
+---
+
+### Task 7：实现本地录音与训练复盘
+
+**文件：**
+- 创建：`scripts/services/recorder.js`
+- 修改：`scripts/views/focus.js`
+- 修改：`scripts/repository.js`
+- 修改：`styles/components.css`
+- 测试：`tests/e2e/learning-flow.spec.js`
+
+- [ ] **步骤 1：编写无麦克风时可降级的失败测试**
+
+在 `learning-flow.spec.js` 增加：
+
+```js
+test('麦克风被拒绝后仍可保存文字复盘', async ({ page, context }) => {
+  await context.clearPermissions();
+  await seedAndStartSpeaking(page);
+  await page.getByRole('button', { name: '开始录音' }).click();
+  await expect(page.getByText('无法使用麦克风，可继续文字复盘')).toBeVisible();
+  await page.getByLabel('演讲要点').fill('机会成本强调被放弃的最佳选择。');
+  await page.getByLabel('我的理解').fill('决策的真实成本不仅是支付金额。');
+  await page.getByLabel('掌握度 4').check();
+  await page.getByRole('button', { name: '完成并保存' }).click();
+  await expect(page.getByText('训练记录已保存')).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：运行并确认失败**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：录音和复盘控件不存在。
+
+- [ ] **步骤 3：实现 RecorderService**
+
+```js
+const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+
+export class RecorderService {
+  constructor(mediaDevices = navigator.mediaDevices) {
+    this.mediaDevices = mediaDevices;
+    this.stream = null;
+    this.recorder = null;
+    this.chunks = [];
+    this.startedAt = null;
+  }
+
+  async start() {
+    if (!this.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      throw new Error('当前浏览器不支持录音');
+    }
+    this.stream = await this.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = MIME_TYPES.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    this.chunks = [];
+    this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);
+    this.recorder.ondataavailable = event => {
+      if (event.data.size) this.chunks.push(event.data);
+    };
+    this.startedAt = Date.now();
+    this.recorder.start();
+  }
+
+  stop() {
+    if (!this.recorder || this.recorder.state === 'inactive') {
+      return Promise.reject(new Error('当前没有正在进行的录音'));
+    }
+    return new Promise((resolve, reject) => {
+      const recorder = this.recorder;
+      recorder.onerror = event => {
+        this.releaseTracks();
+        reject(event.error || new Error('录音失败'));
+      };
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || 'audio/webm';
+        const result = {
+          blob: new Blob(this.chunks, { type: mimeType }),
+          mimeType,
+          durationMs: Date.now() - this.startedAt
+        };
+        this.releaseTracks();
+        resolve(result);
+      };
+      recorder.stop();
+    });
+  }
+
+  cancel() {
+    if (this.recorder?.state !== 'inactive') this.recorder.stop();
+    this.releaseTracks();
+    this.chunks = [];
+  }
+
+  releaseTracks() {
+    this.stream?.getTracks().forEach(track => track.stop());
+    this.stream = null;
+    this.recorder = null;
+    this.startedAt = null;
+  }
+
+  get isRecording() {
+    return this.recorder?.state === 'recording';
+  }
+}
+```
+
+MIME 优先顺序为 `audio/webm;codecs=opus`、`audio/webm`、`audio/mp4`。所有退出路径必须执行 `stream.getTracks().forEach(track => track.stop())`。
+
+- [ ] **步骤 4：实现录音、试听、重录和复盘保存**
+
+演讲阶段显示录音状态、录音时长、停止、试听、重录。录音 Blob 只保存在内存，用户点击“完成并保存”后调用 `repository.saveSession(session, blob)`。复盘要求掌握度 1–5；演讲要点和我的理解可为空，但离开前存在已录音或文本时设置 `beforeunload` 防丢失提示。
+
+保存成功后清除计时状态和草稿标识，更新关键词学习统计并跳转档案页。
+
+- [ ] **步骤 5：完成真实浏览器录音验证**
+
+自动测试验证权限拒绝降级；手动浏览器验证：授权麦克风，录 3 秒，停止、试听、重录并保存。检查浏览器地址栏录音指示在停止后消失。
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：自动流程通过，手动录音无持续占用设备。
+
+- [ ] **步骤 6：提交录音与复盘**
+
+```bash
+git add scripts/services/recorder.js scripts/views/focus.js scripts/repository.js styles/components.css tests/e2e/learning-flow.spec.js
+git commit -m "feat: capture local speaking practice and reflections"
+```
+
+---
+
+### Task 8：实现学习档案与录音回放
+
+**文件：**
+- 创建：`scripts/views/history.js`
+- 修改：`scripts/app.js`
+- 修改：`scripts/repository.js`
+- 修改：`styles/components.css`
+- 测试：`tests/e2e/learning-flow.spec.js`
+
+- [ ] **步骤 1：编写失败的档案筛选测试**
+
+```js
+test('学习档案显示快照、掌握度和复盘并可筛选', async ({ page }) => {
+  await seedCompletedSession(page, { domain: '经济学', category: '宏观经济学', keyword: '机会成本', mastery: 4 });
+  await page.getByRole('link', { name: '档案' }).click();
+  await expect(page.getByRole('heading', { name: '机会成本' })).toBeVisible();
+  await expect(page.getByText('掌握度 4/5')).toBeVisible();
+  await page.getByLabel('领域筛选').selectOption({ label: '经济学' });
+  await expect(page.getByRole('heading', { name: '机会成本' })).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：运行并确认失败**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：档案页没有记录列表或筛选器。
+
+- [ ] **步骤 3：实现档案视图**
+
+档案页顶部显示总训练次数、累计输入分钟、累计输出分钟和平均掌握度。筛选器包括领域、类目、开始日期、结束日期。记录按 `completedAt` 倒序分组到本地日期，显示领域/类目/关键词快照、时长、掌握度和复盘。
+
+有 recordingId 时从仓储读取 Blob，使用 `URL.createObjectURL` 提供 `<audio controls>`；记录节点移除或视图销毁时调用 `URL.revokeObjectURL`。删除录音仅删除 recordings 条目并将 session.recordingId 置空，不删除训练记录。
+
+- [ ] **步骤 4：验证档案与删除录音**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/learning-flow.spec.js`
+
+预期：档案展示与筛选测试通过，控制台没有 Blob URL 或数据库错误。
+
+- [ ] **步骤 5：提交学习档案**
+
+```bash
+git add scripts/views/history.js scripts/app.js scripts/repository.js styles/components.css tests/e2e/learning-flow.spec.js
+git commit -m "feat: browse learning history and local recordings"
+```
+
+---
+
+### Task 9：实现版本化 JSON 导入导出
+
+**文件：**
+- 创建：`scripts/core/backup.js`
+- 修改：`scripts/views/settings.js`
+- 修改：`scripts/repository.js`
+- 测试：`tests/unit/backup.test.js`
+- 测试：`tests/e2e/backup.spec.js`
+
+- [ ] **步骤 1：编写备份校验失败测试**
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateBackup, createBackupDocument } from '../../scripts/core/backup.js';
+
+test('合法备份不包含 API Key', () => {
+  const backup = createBackupDocument({
+    preferences: { apiBaseUrl: 'https://example.test/v1', apiKey: 'secret', apiModel: 'model' },
+    domains: [], categories: [], keywords: [], sessions: [], recordings: []
+  }, '2026-08-05T12:00:00.000Z');
+  assert.equal(backup.schemaVersion, 1);
+  assert.equal('apiKey' in backup.preferences, false);
+});
+
+test('拒绝未知版本和缺失集合', () => {
+  assert.throws(() => validateBackup({ schemaVersion: 99 }), /不支持的备份版本/);
+});
+```
+
+- [ ] **步骤 2：确认测试失败**
+
+运行：`npm test -- tests/unit/backup.test.js`
+
+预期：backup 模块不存在。
+
+- [ ] **步骤 3：实现备份核心**
+
+`scripts/core/backup.js` 导出：
+
+```js
+export const BACKUP_VERSION = 1;
+const COLLECTIONS = ['domains', 'categories', 'keywords', 'sessions', 'recordings'];
+
+export function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+export function dataUrlToBlob(dataUrl) {
+  if (!String(dataUrl).startsWith('data:audio/')) throw new Error('录音数据格式无效');
+  const [metadata, encoded] = dataUrl.split(',', 2);
+  const mimeType = metadata.slice(5).split(';')[0];
+  const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+  return new Blob([bytes], { type: mimeType });
+}
+
+export function createBackupDocument(data, exportedAt = new Date().toISOString()) {
+  const { apiKey, ...preferences } = data.preferences ?? {};
+  return {
+    schemaVersion: BACKUP_VERSION,
+    exportedAt,
+    preferences,
+    domains: data.domains ?? [],
+    categories: data.categories ?? [],
+    keywords: data.keywords ?? [],
+    sessions: data.sessions ?? [],
+    recordings: data.recordings ?? []
+  };
+}
+
+function requireIds(items, label) {
+  if (!Array.isArray(items)) throw new Error(`${label} 必须是数组`);
+  if (items.some(item => typeof item?.id !== 'string' || !item.id)) {
+    throw new Error(`${label} 包含无效 ID`);
+  }
+}
+
+export function validateBackup(document) {
+  if (!document || document.schemaVersion !== BACKUP_VERSION) {
+    throw new Error('不支持的备份版本');
+  }
+  for (const collection of COLLECTIONS) requireIds(document[collection], collection);
+  const domainIds = new Set(document.domains.map(item => item.id));
+  const categoryIds = new Set(document.categories.map(item => item.id));
+  const sessionIds = new Set(document.sessions.map(item => item.id));
+  if (document.categories.some(item => !domainIds.has(item.domainId))) {
+    throw new Error('备份包含无效的类目领域关系');
+  }
+  if (document.keywords.some(item => !domainIds.has(item.domainId) || !categoryIds.has(item.categoryId))) {
+    throw new Error('备份包含无效的关键词关系');
+  }
+  if (document.sessions.some(item => item.mastery < 1 || item.mastery > 5 || !item.keywordSnapshot)) {
+    throw new Error('备份包含无效的训练记录');
+  }
+  if (document.recordings.some(item => !sessionIds.has(item.sessionId) || !String(item.dataUrl).startsWith('data:audio/'))) {
+    throw new Error('备份包含无效的录音记录');
+  }
+  return document;
+}
+
+export function estimateBackupBytes(document) {
+  return new Blob([JSON.stringify(document)]).size;
+}
+```
+
+备份顶层严格包含 `schemaVersion`、`exportedAt`、`preferences`、`domains`、`categories`、`keywords`、`sessions`、`recordings`。录音项保存 id、sessionId、mimeType 和 dataUrl。校验所有集合均为数组、ID 为非空字符串、外键能解析、掌握度在 1–5、dataUrl 以 `data:audio/` 开头。任何失败在写数据库前抛出。
+
+- [ ] **步骤 4：实现设置页导出与导入事务**
+
+导出前读取全部数据、转换录音、显示预计大小，确认后创建下载链接 `十五分之一-YYYY-MM-DD.json`。导入选择文件后先解析和校验，展示数量摘要，再选择“合并”或“覆盖”。
+
+合并时冲突 ID 生成新 UUID，并同步重写 domainId、categoryId、keywordId、sessionId 和 recordingId；覆盖时在同一个跨 store 读写事务中 clear 后 put。API Key 不从导入文件更新。
+
+- [ ] **步骤 5：编写并运行浏览器备份测试**
+
+`backup.spec.js` 验证下载内容没有字符串 `secret-test-key`；清空后导入可恢复领域和关键词；上传 `{ "schemaVersion": 99 }` 显示“不支持的备份版本”且原数据不变。
+
+运行：`npm test && npm run test:e2e -- --project=chromium tests/e2e/backup.spec.js`
+
+预期：全部通过。
+
+- [ ] **步骤 6：提交备份功能**
+
+```bash
+git add scripts/core/backup.js scripts/views/settings.js scripts/repository.js tests/unit/backup.test.js tests/e2e/backup.spec.js
+git commit -m "feat: back up and restore local learning data"
+```
+
+---
+
+### Task 10：完成纸张索引卡视觉、响应式和无障碍
+
+**文件：**
+- 修改：`styles/tokens.css`
+- 修改：`styles/base.css`
+- 修改：`styles/layout.css`
+- 修改：`styles/components.css`
+- 修改：`styles/responsive.css`
+- 修改：`scripts/ui/icons.js`
+- 修改：全部 `scripts/views/*.js`
+- 测试：`tests/e2e/onboarding.spec.js`
+
+- [ ] **步骤 1：增加键盘和移动布局失败测试**
+
+```js
+test('键盘可导航且移动端使用底部导航', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.sidebar')).toHaveCSS('position', 'fixed');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.skip-link')).toBeFocused();
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible();
+});
+```
+
+- [ ] **步骤 2：运行测试并记录失败点**
+
+运行：`npm run test:e2e -- --project=chromium tests/e2e/onboarding.spec.js`
+
+预期：至少一个移动布局或焦点断言失败。
+
+- [ ] **步骤 3：完成视觉系统**
+
+`tokens.css` 固定核心变量：
+
+```css
+:root {
+  --paper: #f4efe4;
+  --paper-raised: #fffaf0;
+  --ink: #26231e;
+  --ink-soft: #6d665b;
+  --line: #d8cdbb;
+  --orange: #c96632;
+  --orange-dark: #9f4823;
+  --sage: #66775f;
+  --danger: #963f34;
+  --shadow-card: 0 16px 40px rgb(62 48 31 / 12%), 0 2px 6px rgb(62 48 31 / 8%);
+  --radius-card: 18px;
+}
+```
+
+背景用多层低对比度 radial-gradient 模拟纸纤维，但不得出现紫色。索引卡添加顶部分隔线、编号和纸张阴影。主按钮暖橙色，危险操作暗红色，掌握度鼠尾草绿。SVG 统一 `currentColor`、`aria-hidden="true"`。
+
+桌面侧栏宽 240px；主内容最大宽 1180px。小于 760px 时侧栏变为固定底部导航，品牌和方法注释隐藏，主内容留出底栏安全区。小于 480px 时主要按钮至少 44px 高。
+
+- [ ] **步骤 4：完成无障碍和减少动效**
+
+所有图标按钮有 `aria-label`；表单错误通过 `aria-describedby` 关联；弹层关闭后焦点回到触发器；抽卡结果用 `aria-live="polite"`；录音状态用 `role="status"`。添加：
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+- [ ] **步骤 5：运行桌面和移动测试并人工查看**
+
+运行：`npm run test:e2e -- tests/e2e/onboarding.spec.js`
+
+预期：chromium 和 mobile 项目均通过。随后在 1440×900、390×844 两种尺寸打开全部五个视图，确认无横向滚动、遮挡和不可点击元素。
+
+- [ ] **步骤 6：提交视觉和无障碍完善**
+
+```bash
+git add styles scripts/ui/icons.js scripts/views tests/e2e/onboarding.spec.js
+git commit -m "style: polish paper card interface across devices"
+```
+
+---
+
+### Task 11：执行全量验证和浏览器真实流程验收
+
+**文件：**
+- 修改：仅修复验证中发现问题的相关源文件和测试文件
+
+- [ ] **步骤 1：运行全部单元测试**
+
+运行：`npm test`
+
+预期：ai、scheduler、timer、backup 四个测试文件全部通过，不存在跳过用例。
+
+- [ ] **步骤 2：运行全部端到端测试**
+
+运行：`npm run test:e2e`
+
+预期：chromium 与 mobile 的 onboarding、learning-flow、ai-settings、backup 全部通过。
+
+- [ ] **步骤 3：检查浏览器控制台和网络**
+
+运行本地服务：`npm run serve`
+
+在浏览器完成：创建领域 → 创建类目 → 手动加词 → 抽卡 → 学习计时 → 演讲计时 → 录音 → 保存复盘 → 档案回放 → 导出 → 清空 → 导入。过程中控制台不得出现未处理异常，除用户配置的 AI 请求外不得访问第三方资源。
+
+- [ ] **步骤 4：验证刷新和权限边界**
+
+分别验证：运行中刷新恢复、暂停后刷新保持、麦克风拒绝降级、通知拒绝不重复询问、损坏备份不改数据、localStorage 中计时 JSON 损坏时恢复默认状态。
+
+- [ ] **步骤 5：检查 GitHub Pages 子路径兼容**
+
+运行：`python -m http.server 4173 --directory ..`
+
+打开：`http://127.0.0.1:4173/fifteen-to-one/`
+
+预期：所有 CSS、JS、SVG 和页面功能正常，浏览器网络面板无 404。
+
+- [ ] **步骤 6：检查仓库状态并提交必要修复**
+
+运行：`git status --short && git diff --check`
+
+预期：无空白错误。若步骤 1–5 产生必要修复，逐个暂存相关文件并提交：
+
+```bash
+git add -u
+git commit -m "fix: resolve end-to-end validation findings"
+```
+
+若没有修复，不创建空提交。
+
+---
+
+### Task 12：创建 GitHub 仓库、启用 Pages 并验证线上站点
+
+**文件：**
+- 无源文件变更；仅执行 GitHub 发布操作
+
+- [ ] **步骤 1：发布前向用户确认外部操作**
+
+明确展示：仓库名 `fifteen-to-one`、仓库可见性 `public`、待推送分支 `main`，并获得用户对“创建公开仓库、推送代码、启用 Pages”的最终确认。
+
+- [ ] **步骤 2：检查认证账号和工作树**
+
+运行：
+
+```bash
+gh auth status
+git status --short
+git log --oneline --decorate -10
+```
+
+预期：GitHub CLI 已登录；工作树干净；所有实施提交位于 main。
+
+- [ ] **步骤 3：创建公开仓库并推送**
+
+运行：
+
+```bash
+OWNER="$(gh api user --jq .login)" && gh repo create "$OWNER/fifteen-to-one" --public --source=. --remote=origin --push
+```
+
+预期：远端仓库创建成功，main 已推送并跟踪 `origin/main`。
+
+- [ ] **步骤 4：启用从 main 根目录发布 Pages**
+
+运行：
+
+```bash
+OWNER="$(gh api user --jq .login)" && gh api --method POST "repos/$OWNER/fifteen-to-one/pages" -f 'source[branch]=main' -f 'source[path]=/'
+```
+
+若 API 返回 409 且 Pages 已存在，则读取状态，不重复创建：
+
+```bash
+OWNER="$(gh api user --jq .login)" && gh api "repos/$OWNER/fifteen-to-one/pages"
+```
+
+预期：返回 `html_url`，构建类型为 legacy，source 为 main `/`。
+
+- [ ] **步骤 5：检查 Pages 构建状态**
+
+运行：
+
+```bash
+OWNER="$(gh api user --jq .login)" && gh api "repos/$OWNER/fifteen-to-one/pages/builds/latest"
+```
+
+预期：最终状态为 `built`。若为 queued/building，等待 GitHub 完成后重新读取一次；不使用固定 sleep 循环。
+
+- [ ] **步骤 6：在线上地址完成最终浏览器验收**
+
+从 Pages API 返回值读取真实 `html_url`，用浏览器打开，不猜测 URL。验证：资源无 404、创建领域、添加手动关键词、抽卡、计时、复盘、刷新持久化和 JSON 导出。麦克风功能在 HTTPS 下可申请权限。
+
+- [ ] **步骤 7：向用户交付链接和验证结果**
+
+返回 GitHub 仓库 URL、Pages URL、已执行测试摘要、AI Key 浏览器存储安全提示，以及本地项目路径 `E:\project\fifteen-to-one`。
+
+---
+
+## 规格覆盖自审
+
+- 多领域、任意类目、手动关键词：Task 2–3。
+- OpenAI 兼容 API、自定义 Base URL/模型/API Key、候选勾选：Task 4。
+- 间隔重复、不限抽卡次数：Task 5。
+- 15 分钟学习、1 分钟演讲、自由切换、刷新恢复：Task 6。
+- 麦克风录音、试听、重录、文字复盘和掌握度：Task 7。
+- 历史快照、筛选与录音回放：Task 8。
+- JSON 合并/覆盖、录音、版本校验和排除 API Key：Task 9。
+- 纸张索引卡视觉、响应式、SVG 和减少动效：Task 10。
+- 全局测试、子路径和真实浏览器验证：Task 11。
+- GitHub 发布、Pages 与线上验收：Task 12。
+
+占位符扫描已通过，所有接口均有明确名称与行为；核心数据字段、函数名称和存储名称在全部任务中保持一致。
