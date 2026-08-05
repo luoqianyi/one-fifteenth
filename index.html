@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f3ede1">
+  <meta name="description" content="十五分钟输入，一分钟输出。">
+  <title>十五分之一</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles/tokens.css">
+  <link rel="stylesheet" href="./styles/base.css">
+  <link rel="stylesheet" href="./styles/layout.css">
+  <link rel="stylesheet" href="./styles/components.css">
+  <link rel="stylesheet" href="./styles/responsive.css">
+</head>
+<body>
+  <a class="skip-link" href="#app-view">跳到主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#draw" aria-label="十五分之一首页">
+        <span class="brand-mark" aria-hidden="true"><b>15</b><i></i><b>1</b></span>
+        <span class="brand-copy"><strong>十五分之一</strong><small>输入 · 输出 · 内化</small></span>
+      </a>
+      <nav aria-label="主导航" id="main-nav"></nav>
+      <div class="method-note" aria-hidden="true"><span>十五分钟输入</span><span>一分钟输出</span></div>
+    </aside>
+    <main id="app-view" tabindex="-1"></main>
+    <div id="floating-timer" hidden></div>
+  </div>
+  <div id="dialog-root"></div>
+  <div id="toast-root" role="status" aria-live="polite"></div>
+  <script type="module" src="./scripts/app.js"></script>
+</body>
+</html>

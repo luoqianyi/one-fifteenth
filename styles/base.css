@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+html { color-scheme: light; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 20% 10%, rgb(255 255 255 / 48%) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 75% 62%, rgb(83 63 40 / 5%) 0 .7px, transparent 1.2px),
+    linear-gradient(112deg, transparent 0 48%, rgb(255 255 255 / 16%) 49% 50%, transparent 51%);
+  background-size: 23px 23px, 17px 17px, 100% 100%;
+}
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+a { color: inherit; }
+button { cursor: pointer; }
+::selection { color: var(--paper-raised); background: var(--orange-dark); }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--orange) 68%, white); outline-offset: 3px; }
+.skip-link { position: fixed; z-index: 100; top: 12px; left: 12px; padding: 10px 14px; color: white; background: var(--ink); transform: translateY(-150%); }
+.skip-link:focus { transform: translateY(0); }

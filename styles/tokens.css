@@ -1,0 +1,19 @@
+:root {
+  --paper: #f3ede1;
+  --paper-deep: #e9dfcf;
+  --paper-raised: #fffaf0;
+  --ink: #27231d;
+  --ink-soft: #71695d;
+  --line: #d8cbb8;
+  --orange: #c76432;
+  --orange-dark: #94431f;
+  --sage: #687762;
+  --danger: #963f34;
+  --shadow-card: 0 24px 60px rgb(67 50 29 / 13%), 0 3px 8px rgb(67 50 29 / 9%);
+  --shadow-soft: 0 12px 35px rgb(67 50 29 / 8%);
+  --radius-card: 20px;
+  --font-display: Georgia, 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --font-body: 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
+  --sidebar-width: 248px;
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+}
