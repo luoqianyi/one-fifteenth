@@ -1,4 +1,5 @@
 import { repository } from './repository.js';
+import { renderLibrary } from './views/library.js';
 
 export const routes = [
   ['draw', '抽取'],
@@ -65,11 +66,12 @@ function renderPlaceholder(route) {
   view.innerHTML = `<section class="page"><p class="eyebrow">FIFTEEN / ONE</p><h1>${label}</h1><p class="lead">这一页正在等待你的第一张知识卡。</p></section>`;
 }
 
-function render() {
+async function render() {
   const requested = location.hash.slice(1) || 'draw';
   const route = routes.some(([key]) => key === requested) ? requested : 'draw';
   renderNav(route);
   if (route === 'draw') renderEmptyDraw();
+  else if (route === 'library') await renderLibrary(view, { repository });
   else renderPlaceholder(route);
 }
 

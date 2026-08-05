@@ -12,6 +12,9 @@
   .hero { min-height: auto; grid-template-columns: 1fr; gap: 50px; }
   .hero-copy { padding-top: 8vh; }
   .index-card { width: min(100%, 520px); min-height: 420px; }
+  .page-heading { align-items: start; flex-direction: column; }
+  .library-grid { grid-template-columns: 1fr 1fr; }
+  .keyword-panel { grid-column: 1 / -1; }
 }
 @media (max-width: 480px) {
   #app-view { padding: 34px 18px; }
@@ -21,6 +24,11 @@
   .index-card { min-height: 390px; padding: 34px 30px; }
   .index-card::after { left: 38px; }
   .card-kicker { margin-top: 55px; }
+  .library-grid { grid-template-columns: 1fr; }
+  .keyword-panel { grid-column: auto; }
+  .library-panel { min-height: auto; }
+  .keyword-grid { grid-template-columns: 1fr; }
+  .dialog-form { padding: 28px 22px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
