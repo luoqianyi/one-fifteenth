@@ -1,3 +1,5 @@
+import { repository } from './repository.js';
+
 export const routes = [
   ['draw', '抽取'],
   ['focus', '专注'],
@@ -8,6 +10,14 @@ export const routes = [
 
 const nav = document.querySelector('#main-nav');
 const view = document.querySelector('#app-view');
+const dialogRoot = document.querySelector('#dialog-root');
+const state = { domains: [] };
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  })[character]);
+}
 
 function navIcon(route) {
   const paths = {
@@ -35,7 +45,9 @@ function renderEmptyDraw() {
         <p class="eyebrow">THE FIFTEEN-TO-ONE METHOD</p>
         <h1>十五分之一</h1>
         <p class="lead">给一个概念十五分钟，再用一分钟把它讲明白。</p>
-        <button class="button primary" type="button" data-action="create-domain">创建第一个领域</button>
+        ${state.domains.length
+          ? `<div class="domain-strip"><span>当前领域</span>${state.domains.map(domain => `<b>${escapeHtml(domain.name)}</b>`).join('')}</div><button class="button primary" type="button" disabled>添加关键词后开始抽卡</button>`
+          : '<button class="button primary" type="button" data-action="create-domain">创建第一个领域</button>'}
       </div>
       <article class="index-card" aria-label="学习方法示意卡">
         <div class="card-number">NO. 001</div>
@@ -61,5 +73,61 @@ function render() {
   else renderPlaceholder(route);
 }
 
+function openDomainDialog() {
+  dialogRoot.innerHTML = `
+    <dialog class="dialog">
+      <form method="dialog" class="dialog-form">
+        <div class="dialog-heading">
+          <p class="eyebrow">NEW DOMAIN</p>
+          <h2>创建学习领域</h2>
+        </div>
+        <label class="field">
+          <span>领域名称</span>
+          <input name="name" maxlength="60" autocomplete="off" placeholder="例如：经济学" required>
+          <small class="field-error" aria-live="polite"></small>
+        </label>
+        <div class="dialog-actions">
+          <button class="button" type="button" data-action="cancel">取消</button>
+          <button class="button primary" type="submit">保存领域</button>
+        </div>
+      </form>
+    </dialog>`;
+
+  const dialog = dialogRoot.querySelector('dialog');
+  const form = dialog.querySelector('form');
+  const input = form.elements.name;
+  const error = dialog.querySelector('.field-error');
+
+  dialog.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const name = input.value.trim();
+    if (!name) {
+      error.textContent = '请输入领域名称';
+      input.focus();
+      return;
+    }
+    const duplicate = state.domains.some(domain => domain.name.toLocaleLowerCase('zh-CN') === name.toLocaleLowerCase('zh-CN'));
+    if (duplicate) {
+      error.textContent = '这个领域已经存在';
+      input.focus();
+      return;
+    }
+    const domain = await repository.createDomain(name);
+    state.domains.push(domain);
+    dialog.close();
+    render();
+  });
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.showModal();
+  input.focus();
+}
+
+view.addEventListener('click', event => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'create-domain') openDomainDialog();
+});
+
 addEventListener('hashchange', render);
+state.domains = await repository.list('domains');
 render();

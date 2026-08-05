@@ -16,4 +16,18 @@ h1 { margin: 0; font: 700 clamp(48px, 7vw, 92px)/.98 var(--font-display); letter
 .card-rule { width: 62px; height: 3px; margin: 30px 0 22px; background: var(--orange); }
 .index-card > p:last-of-type { max-width: 320px; color: var(--ink-soft); font: 15px/1.8 var(--font-display); }
 .card-tab { position: absolute; right: -1px; bottom: 30px; padding: 9px 18px; color: white; background: var(--sage); font-size: 11px; letter-spacing: .12em; }
+.domain-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -8px 0 28px; }
+.domain-strip span { color: var(--ink-soft); font-size: 12px; }
+.domain-strip b { padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: rgb(255 250 240 / 75%); font-size: 12px; }
+.button:disabled { cursor: not-allowed; opacity: .56; box-shadow: none; transform: none; }
+.dialog { width: min(92vw, 520px); padding: 0; border: 1px solid var(--line); border-radius: 3px 3px 18px 18px; color: var(--ink); background: var(--paper-raised); box-shadow: var(--shadow-card); }
+.dialog::backdrop { background: rgb(39 35 29 / 42%); backdrop-filter: blur(3px); }
+.dialog-form { display: grid; gap: 28px; padding: 36px; }
+.dialog-heading h2 { margin: 0; font: 700 32px/1.15 var(--font-display); }
+.field { display: grid; gap: 9px; }
+.field > span { font-size: 13px; font-weight: 700; }
+.field input { min-height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: #fffdf7; }
+.field input:focus { border-color: var(--orange); outline: 3px solid rgb(199 100 50 / 14%); }
+.field-error { min-height: 18px; color: var(--danger); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 @keyframes card-in { from { opacity: 0; transform: translateY(28px) rotate(4deg); } to { opacity: 1; transform: translateY(0) rotate(1.5deg); } }
