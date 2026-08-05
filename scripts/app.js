@@ -1,5 +1,6 @@
 import { repository } from './repository.js';
 import { renderLibrary } from './views/library.js';
+import { renderSettings } from './views/settings.js';
 
 export const routes = [
   ['draw', '抽取'],
@@ -72,6 +73,7 @@ async function render() {
   renderNav(route);
   if (route === 'draw') renderEmptyDraw();
   else if (route === 'library') await renderLibrary(view, { repository });
+  else if (route === 'settings') await renderSettings(view);
   else renderPlaceholder(route);
 }
 

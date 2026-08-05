@@ -29,8 +29,9 @@ export function openDialog({ eyebrow = 'FIFTEEN / ONE', title, content, confirmL
     error.textContent = '';
     submit.disabled = true;
     try {
-      await onConfirm(new FormData(form), form);
-      dialog.close();
+      const shouldClose = await onConfirm(new FormData(form), form, dialog);
+      if (shouldClose !== false) dialog.close();
+      else submit.disabled = false;
     } catch (reason) {
       error.textContent = reason instanceof Error ? reason.message : '保存失败，请重试';
       submit.disabled = false;
