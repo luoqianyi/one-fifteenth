@@ -111,3 +111,14 @@ test('删除领域后回退到空状态', async ({ page }) => {
   await confirmDialogDelete(page);
   await expect(page.getByText('先创建一个学习领域', { exact: false })).toBeVisible();
 });
+
+test('可添加第二个领域', async ({ page }) => {
+  await seedDomain(page, '经济学');
+  await page.getByRole('link', { name: '领域', exact: true }).click();
+  await page.getByRole('button', { name: '添加领域' }).click();
+  await page.getByLabel('领域名称').fill('心理学');
+  await page.getByRole('button', { name: '保存领域' }).click();
+  await expect(page.getByText('心理学', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('心理学', { exact: true })).toBeVisible();
+});
