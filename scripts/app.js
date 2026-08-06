@@ -1,6 +1,10 @@
 import { repository } from './repository.js';
+import { renderDraw } from './views/draw.js';
+import { renderFocus } from './views/focus.js';
+import { renderHistory } from './views/history.js';
 import { renderLibrary } from './views/library.js';
 import { renderSettings } from './views/settings.js';
+import { loadPreferences, savePreferences } from './services/preferences.js';
 
 export const routes = [
   ['draw', '抽取'],
@@ -13,7 +17,22 @@ export const routes = [
 const nav = document.querySelector('#main-nav');
 const view = document.querySelector('#app-view');
 const dialogRoot = document.querySelector('#dialog-root');
+const sidebarToggle = document.querySelector('#sidebar-toggle');
 const state = { domains: [] };
+
+function applySidebarCollapsed(collapsed) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+  sidebarToggle.setAttribute('aria-label', collapsed ? '展开侧边栏' : '折叠侧边栏');
+  sidebarToggle.title = collapsed ? '展开侧边栏' : '折叠侧边栏';
+}
+
+applySidebarCollapsed(Boolean(loadPreferences().sidebarCollapsed));
+sidebarToggle.addEventListener('click', () => {
+  const collapsed = !document.body.classList.contains('sidebar-collapsed');
+  applySidebarCollapsed(collapsed);
+  savePreferences({ sidebarCollapsed: collapsed });
+});
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({
@@ -71,7 +90,9 @@ async function render() {
   const requested = location.hash.slice(1) || 'draw';
   const route = routes.some(([key]) => key === requested) ? requested : 'draw';
   renderNav(route);
-  if (route === 'draw') renderEmptyDraw();
+  if (route === 'draw') await renderDraw(view, { repository });
+  else if (route === 'focus') await renderFocus(view, { repository });
+  else if (route === 'history') await renderHistory(view, { repository });
   else if (route === 'library') await renderLibrary(view, { repository });
   else if (route === 'settings') await renderSettings(view);
   else renderPlaceholder(route);

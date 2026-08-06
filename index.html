@@ -17,10 +17,15 @@
   <a class="skip-link" href="#app-view">跳到主要内容</a>
   <div class="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="#draw" aria-label="十五分之一首页">
-        <span class="brand-mark" aria-hidden="true"><b>15</b><i></i><b>1</b></span>
-        <span class="brand-copy"><strong>十五分之一</strong><small>输入 · 输出 · 内化</small></span>
-      </a>
+      <div class="sidebar-top">
+        <a class="brand" href="#draw" aria-label="十五分之一首页">
+          <span class="brand-mark" aria-hidden="true"><b>15</b><i></i><b>1</b></span>
+          <span class="brand-copy"><strong>十五分之一</strong><small>输入 · 输出 · 内化</small></span>
+        </a>
+        <button id="sidebar-toggle" type="button" aria-label="折叠侧边栏" aria-expanded="true" title="折叠侧边栏">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5v15M4 4.5h16v15H4zM13 9l3 3-3 3"/></svg>
+        </button>
+      </div>
       <nav aria-label="主导航" id="main-nav"></nav>
       <div class="method-note" aria-hidden="true"><span>十五分钟输入</span><span>一分钟输出</span></div>
     </aside>

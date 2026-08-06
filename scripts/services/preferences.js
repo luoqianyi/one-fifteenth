@@ -6,7 +6,8 @@ const defaults = {
   apiKey: '',
   apiModel: 'gpt-4.1-mini',
   soundEnabled: true,
-  notificationsEnabled: false
+  notificationsEnabled: false,
+  sidebarCollapsed: false
 };
 
 export function loadPreferences() {

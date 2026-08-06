@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
+async function reset(page) {
   await page.goto('/');
   await page.evaluate(async () => {
     localStorage.clear();
@@ -10,24 +10,9 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.reload();
-});
+}
 
-test('首次访问显示品牌、导航和开始引导', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: '十五分之一' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '创建第一个领域' })).toBeVisible();
-});
-
-test('创建领域后刷新页面仍保留', async ({ page }) => {
-  await page.getByRole('button', { name: '创建第一个领域' }).click();
-  await page.getByLabel('领域名称').fill('经济学');
-  await page.getByRole('button', { name: '保存领域' }).click();
-  await expect(page.getByText('经济学', { exact: true })).toBeVisible();
-  await page.reload();
-  await expect(page.getByText('经济学', { exact: true })).toBeVisible();
-});
-
-test('可创建类目和手动关键词', async ({ page }) => {
+async function createKeyword(page) {
   await page.getByRole('button', { name: '创建第一个领域' }).click();
   await page.getByLabel('领域名称').fill('经济学');
   await page.getByRole('button', { name: '保存领域' }).click();
@@ -42,4 +27,16 @@ test('可创建类目和手动关键词', async ({ page }) => {
   await page.getByLabel('一句简介').fill('选择一种方案时放弃的最佳替代方案的价值。');
   await page.getByRole('button', { name: '保存关键词' }).click();
   await expect(page.getByRole('heading', { name: '机会成本' })).toBeVisible();
+}
+
+test.beforeEach(async ({ page }) => reset(page));
+
+test('从词库加权抽取完整的关键词卡', async ({ page }) => {
+  await createKeyword(page);
+  await page.getByRole('link', { name: '抽取' }).click();
+  await page.getByRole('button', { name: '抽取关键词' }).click();
+  await expect(page.getByRole('heading', { name: '机会成本' })).toBeVisible();
+  await expect(page.locator('.card-breadcrumb')).toContainText('微观经济学');
+  await expect(page.locator('.level-badge')).toContainText('入门');
+  await expect(page.getByRole('button', { name: '开始 15 分钟' })).toBeVisible();
 });

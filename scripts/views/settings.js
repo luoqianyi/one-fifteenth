@@ -1,5 +1,6 @@
 import { loadPreferences, savePreferences } from '../services/preferences.js';
 import { testConnection } from '../core/ai.js';
+import { downloadBackup, exportBackup, importBackup } from '../services/backup.js';
 import { showToast } from '../ui/dialog.js';
 
 export async function renderSettings(container) {
@@ -22,8 +23,11 @@ export async function renderSettings(container) {
           <label class="switch-row"><span><b>浏览器通知</b><small>切到其他页面时仍收到提醒</small></span><input type="checkbox" data-preference="notificationsEnabled"></label>
         </section>
         <section class="settings-card data-card">
-          <div class="settings-card-heading"><span class="section-number">03</span><div><h2>数据与备份</h2><p>导出和恢复功能将在本地运行</p></div></div>
-          <div class="data-actions"><button class="button" type="button" data-action="export" disabled>导出 JSON 备份</button><button class="button" type="button" data-action="import" disabled>导入备份</button></div>
+          <div class="settings-card-heading"><span class="section-number">03</span><div><h2>数据与备份</h2><p>导出和恢复功能在本地运行，请在当前设备妥善保管备份文件</p></div></div>
+          <div class="data-actions">
+            <button class="button" type="button" data-action="export">导出 JSON 备份</button>
+            <label class="button file-button" data-action="import"><span>导入备份</span><input type="file" accept="application/json,.json" data-action="import" hidden></label>
+          </div>
         </section>
       </div>
     </section>`;
@@ -79,4 +83,39 @@ export async function renderSettings(container) {
   for (const checkbox of container.querySelectorAll('[data-preference]')) {
     checkbox.addEventListener('change', () => savePreferences({ [checkbox.dataset.preference]: checkbox.checked }));
   }
+
+  const exportButton = container.querySelector('[data-action="export"]');
+  exportButton.addEventListener('click', async () => {
+    const button = exportButton;
+    button.disabled = true;
+    button.textContent = '正在导出…';
+    try {
+      const backup = await exportBackup();
+      downloadBackup(backup);
+      showToast('备份已导出', 'success');
+    } catch (error) {
+      showToast(error.message || '导出失败', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = '导出 JSON 备份';
+    }
+  });
+
+  const fileInput = container.querySelector('input[type="file"][data-action="import"]');
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const label = container.querySelector('[data-action="import"]');
+    label.classList.add('is-busy');
+    try {
+      const counts = await importBackup(file);
+      showToast(`数据已恢复：${counts.domains} 个领域、${counts.keywords} 个关键词、${counts.sessions} 条记录`, 'success');
+      renderSettings(container);
+    } catch (error) {
+      showToast(error.message || '导入失败', 'error');
+    } finally {
+      label.classList.remove('is-busy');
+      fileInput.value = '';
+    }
+  });
 }

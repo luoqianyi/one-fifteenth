@@ -25,7 +25,7 @@ test('保存 OpenAI 兼容配置并从 AI 候选加入关键词', async ({ page 
   await page.getByLabel('领域名称').fill('经济学');
   await page.getByRole('button', { name: '保存领域' }).click();
   await expect(page.getByText('经济学', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: '领域' }).click();
+  await page.getByRole('link', { name: '领域', exact: true }).click();
   await page.getByRole('button', { name: '添加类目' }).click();
   await page.getByLabel('类目名称').fill('宏观经济学');
   await page.getByRole('button', { name: '保存类目' }).click();

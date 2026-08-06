@@ -1,8 +1,9 @@
 @media (max-width: 860px) {
   :root { --sidebar-width: 0px; }
+  body.sidebar-collapsed { --sidebar-width: 0px; }
   .app-shell { padding: 0 0 76px; }
   .sidebar { inset: auto 0 0; width: auto; height: 70px; padding: 8px 10px max(8px, env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--line); }
-  .brand, .method-note { display: none; }
+  .brand, .method-note, #sidebar-toggle, .sidebar-top { display: none; }
   #main-nav { grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 0; }
   #main-nav a { flex-direction: column; justify-content: center; gap: 4px; min-height: 52px; padding: 4px; font-size: 11px; }
   #main-nav a:hover { transform: none; }
@@ -17,6 +18,17 @@
   .keyword-panel { grid-column: 1 / -1; }
   .settings-grid { grid-template-columns: 1fr; }
   .data-card { grid-column: auto; }
+  .history-stats { grid-template-columns: 1fr 1fr; }
+  .history-group-head { align-items: start; flex-direction: column; gap: 14px; }
+  .session-row { grid-template-columns: 1fr auto; grid-template-areas: 'date badge' 'duration action'; row-gap: 6px; align-items: start; }
+  .session-row .session-date { grid-area: date; }
+  .session-row .session-duration { grid-area: duration; }
+  .session-row .session-badge { grid-area: badge; justify-self: end; }
+  .session-row .text-button { grid-area: action; justify-self: end; }
+
+  .draw-stage { grid-template-columns: 1fr; gap: 32px; }
+  .draw-copy { display: none; }
+  .draw-card-host { margin: 0 auto; }
 }
 @media (max-width: 480px) {
   #app-view { padding: 34px 18px; }
@@ -31,6 +43,25 @@
   .library-panel { min-height: auto; }
   .keyword-grid { grid-template-columns: 1fr; }
   .dialog-form { padding: 28px 22px; }
+  .draw-heading { align-items: start; flex-direction: column; }
+  .compact-field { width: 100%; }
+  .draw-stage { min-height: 460px; padding-top: 26px; }
+  .draw-card-host, .card-deck-placeholder, .drawn-card { min-height: 390px; }
+  .drawn-card { padding: 30px 26px; }
+  .card-breadcrumb { margin-top: 48px; }
+  .draw-actions { justify-content: stretch; }
+  .draw-actions .button { flex: 1; }
+  .focus-header { align-items: start; flex-direction: column; }
+  .focus-stage { grid-template-columns: 1fr; gap: 30px; }
+  .focus-card { min-height: 0; }
+  .clock-time { font-size: clamp(84px, 30vw, 130px); }
+  .phase-tabs { display: flex; }
+  .phase-tab { flex: 1; }
+  .focus-actions { justify-content: stretch; }
+  .focus-actions .button { flex: 1; }
+  .history-stats { grid-template-columns: 1fr 1fr; }
+  .history-group-meta { flex-wrap: wrap; }
+  .session-detail { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
