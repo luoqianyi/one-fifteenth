@@ -11,6 +11,24 @@ const levelLabel = {
   comprehensive: '综合'
 };
 
+function confirmDestructive({ title, message, confirmLabel = '删除', onConfirm }) {
+  const content = document.createElement('div');
+  const p = document.createElement('p');
+  p.className = 'confirm-message';
+  p.textContent = message;
+  content.append(p);
+  openDialog({
+    eyebrow: 'CONFIRM',
+    title,
+    content,
+    confirmLabel,
+    onConfirm: async () => {
+      await onConfirm();
+      return true;
+    }
+  });
+}
+
 function createField(label, control) {
   const wrapper = document.createElement('label');
   wrapper.className = 'field';
@@ -20,79 +38,93 @@ function createField(label, control) {
   return wrapper;
 }
 
-function textInput(name, placeholder, maxLength) {
+function textInput(name, placeholder, maxLength, value = '') {
   const input = document.createElement('input');
   input.name = name;
   input.placeholder = placeholder;
   input.maxLength = maxLength;
   input.required = true;
   input.autocomplete = 'off';
+  if (value) input.value = value;
   return input;
 }
 
-async function openCategoryDialog(context, domainId) {
+async function openCategoryDialog(context, domainId, existing = null) {
   const content = document.createElement('div');
   content.className = 'form-stack';
-  content.append(createField('类目名称', textInput('name', '例如：微观经济学', 60)));
+  content.append(createField('类目名称', textInput('name', '例如：微观经济学', 60, existing?.name ?? '')));
   openDialog({
-    eyebrow: 'NEW CATEGORY',
-    title: '添加学习类目',
+    eyebrow: existing ? 'EDIT CATEGORY' : 'NEW CATEGORY',
+    title: existing ? '编辑学习类目' : '添加学习类目',
     content,
-    confirmLabel: '保存类目',
+    confirmLabel: existing ? '保存修改' : '保存类目',
     onConfirm: async data => {
       const name = String(data.get('name')).trim();
       if (!name) throw new Error('请输入类目名称');
-      const existing = await context.repository.getByIndex('categories', 'domainId', domainId);
-      if (existing.some(item => item.name.toLocaleLowerCase('zh-CN') === name.toLocaleLowerCase('zh-CN'))) {
+      const found = await context.repository.getByIndex('categories', 'domainId', domainId);
+      if (found.some(item => item.id !== existing?.id && item.name.toLocaleLowerCase('zh-CN') === name.toLocaleLowerCase('zh-CN'))) {
         throw new Error('这个类目已经存在');
       }
-      const category = await context.repository.createCategory(domainId, name);
-      selectedCategoryId = category.id;
+      if (existing) {
+        await context.repository.put('categories', { ...existing, name, updatedAt: new Date().toISOString() });
+        showToast('类目已更新', 'success');
+      } else {
+        const category = await context.repository.createCategory(domainId, name);
+        selectedCategoryId = category.id;
+        showToast('类目已添加', 'success');
+      }
       await renderLibrary(context.container, context);
-      showToast('类目已添加', 'success');
     }
   });
 }
 
-async function openKeywordDialog(context, domainId, categoryId) {
+async function openKeywordDialog(context, domainId, categoryId, existing = null) {
   const content = document.createElement('div');
   content.className = 'form-stack';
-  const name = textInput('name', '例如：机会成本', 80);
+  const name = textInput('name', '例如：机会成本', 80, existing?.name ?? '');
   const level = document.createElement('select');
   level.name = 'level';
   level.setAttribute('aria-label', '难度');
   level.innerHTML = '<option value="beginner">入门</option><option value="advanced">进阶</option><option value="comprehensive">综合</option>';
+  level.value = existing?.level ?? 'beginner';
   const summary = document.createElement('textarea');
   summary.name = 'summary';
   summary.maxLength = 240;
   summary.rows = 4;
   summary.placeholder = '用一句话说明这个概念';
+  if (existing?.summary) summary.value = existing.summary;
   content.append(
     createField('关键词', name),
     createField('难度', level),
     createField('一句简介', summary)
   );
   openDialog({
-    eyebrow: 'NEW KEYWORD',
-    title: '添加关键词卡',
+    eyebrow: existing ? 'EDIT KEYWORD' : 'NEW KEYWORD',
+    title: existing ? '编辑关键词卡' : '添加关键词卡',
     content,
-    confirmLabel: '保存关键词',
+    confirmLabel: existing ? '保存修改' : '保存关键词',
     onConfirm: async data => {
       const keywordName = String(data.get('name')).trim();
       if (!keywordName) throw new Error('请输入关键词');
-      const existing = await context.repository.getByIndex('keywords', 'categoryId', categoryId);
-      if (existing.some(item => item.name.toLocaleLowerCase('zh-CN') === keywordName.toLocaleLowerCase('zh-CN'))) {
+      const found = await context.repository.getByIndex('keywords', 'categoryId', categoryId);
+      if (found.some(item => item.id !== existing?.id && item.name.toLocaleLowerCase('zh-CN') === keywordName.toLocaleLowerCase('zh-CN'))) {
         throw new Error('这个关键词已经存在');
       }
-      await context.repository.createKeyword({
+      const payload = {
         domainId,
         categoryId,
         name: keywordName,
         level: String(data.get('level')),
         summary: String(data.get('summary') ?? '')
-      });
+      };
+      if (existing) {
+        await context.repository.put('keywords', { ...existing, ...payload, name: keywordName.trim(), summary: payload.summary.trim(), updatedAt: new Date().toISOString() });
+        showToast('关键词已更新', 'success');
+      } else {
+        await context.repository.createKeyword(payload);
+        showToast('关键词已加入卡组', 'success');
+      }
       await renderLibrary(context.container, context);
-      showToast('关键词已加入卡组', 'success');
     }
   });
 }
@@ -198,33 +230,124 @@ async function openAiSuggestionDialog(context, domain, category) {
   });
 }
 
-function appendDomainButtons(host, domains, activeId, onSelect) {
+function openDomainDialog(context, existing = null) {
+  const content = document.createElement('div');
+  content.className = 'form-stack';
+  content.append(createField('领域名称', textInput('name', '例如：经济学', 60, existing?.name ?? '')));
+  openDialog({
+    eyebrow: existing ? 'EDIT DOMAIN' : 'NEW DOMAIN',
+    title: existing ? '编辑学习领域' : '创建学习领域',
+    content,
+    confirmLabel: existing ? '保存修改' : '保存领域',
+    onConfirm: async data => {
+      const name = String(data.get('name')).trim();
+      if (!name) throw new Error('请输入领域名称');
+      const found = await context.repository.list('domains');
+      if (found.some(item => item.id !== existing?.id && item.name.toLocaleLowerCase('zh-CN') === name.toLocaleLowerCase('zh-CN'))) {
+        throw new Error('这个领域已经存在');
+      }
+      if (existing) {
+        await context.repository.put('domains', { ...existing, name, updatedAt: new Date().toISOString() });
+        showToast('领域已更新', 'success');
+      } else {
+        const domain = await context.repository.createDomain(name);
+        selectedDomainId = domain.id;
+        showToast('领域已创建', 'success');
+      }
+      await renderLibrary(context.container, context);
+    }
+  });
+}
+
+function appendDomainButtons(host, domains, activeId, onSelect, context) {
   for (const domain of domains) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'library-list-item';
-    if (domain.id === activeId) button.setAttribute('aria-current', 'true');
+    const item = document.createElement('div');
+    item.className = 'library-list-item';
+    if (domain.id === activeId) item.setAttribute('aria-current', 'true');
     const name = document.createElement('strong');
     name.textContent = domain.name;
-    button.append(name);
-    button.addEventListener('click', () => onSelect(domain.id));
-    host.append(button);
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'text-button';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', event => {
+      event.stopPropagation();
+      openDomainDialog(context, domain);
+    });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'text-button is-danger';
+    del.textContent = '删除';
+    del.addEventListener('click', event => {
+      event.stopPropagation();
+      confirmDestructive({
+        title: '删除领域',
+        message: `确定删除领域“${domain.name}”吗？其下的所有类目、关键词与学习记录将一并删除，此操作不可恢复。`,
+        onConfirm: async () => {
+          await context.repository.removeDomainCascade(domain.id);
+          if (selectedDomainId === domain.id) selectedDomainId = null;
+          showToast('领域已删除', 'success');
+          await renderLibrary(context.container, context);
+        }
+      });
+    });
+    actions.append(edit, del);
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'library-list-item-main';
+    main.textContent = domain.name;
+    main.addEventListener('click', () => onSelect(domain.id));
+    item.append(actions, main);
+    host.append(item);
   }
 }
 
-function appendCategoryButtons(host, categories, activeId, onSelect) {
+function appendCategoryButtons(host, categories, activeId, onSelect, context) {
   for (const category of categories) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'library-list-item';
-    if (category.id === activeId) button.setAttribute('aria-current', 'true');
-    button.textContent = category.name;
-    button.addEventListener('click', () => onSelect(category.id));
-    host.append(button);
+    const item = document.createElement('div');
+    item.className = 'library-list-item';
+    if (category.id === activeId) item.setAttribute('aria-current', 'true');
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'text-button';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', event => {
+      event.stopPropagation();
+      openCategoryDialog(context, category.domainId, category);
+    });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'text-button is-danger';
+    del.textContent = '删除';
+    del.addEventListener('click', event => {
+      event.stopPropagation();
+      confirmDestructive({
+        title: '删除类目',
+        message: `确定删除类目“${category.name}”吗？其下的所有关键词与学习记录将一并删除，此操作不可恢复。`,
+        onConfirm: async () => {
+          await context.repository.removeCategoryCascade(category.id);
+          if (selectedCategoryId === category.id) selectedCategoryId = null;
+          showToast('类目已删除', 'success');
+          await renderLibrary(context.container, context);
+        }
+      });
+    });
+    actions.append(edit, del);
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'library-list-item-main';
+    main.textContent = category.name;
+    main.addEventListener('click', () => onSelect(category.id));
+    item.append(actions, main);
+    host.append(item);
   }
 }
 
-function appendKeywordCards(host, keywords) {
+function appendKeywordCards(host, keywords, context, domainId, categoryId) {
   if (!keywords.length) {
     host.innerHTML = '<div class="panel-empty"><p>这个类目还没有关键词。</p><small>手动添加，或让 AI 为你整理一组候选。</small></div>';
     return;
@@ -232,6 +355,29 @@ function appendKeywordCards(host, keywords) {
   for (const keyword of keywords) {
     const card = document.createElement('article');
     card.className = 'keyword-card';
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'text-button';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', () => openKeywordDialog(context, domainId, categoryId, keyword));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'text-button is-danger';
+    del.textContent = '删除';
+    del.addEventListener('click', () => {
+      confirmDestructive({
+        title: '删除关键词',
+        message: `确定删除关键词“${keyword.name}”吗？其学习记录也将一并删除，此操作不可恢复。`,
+        onConfirm: async () => {
+          await context.repository.removeKeywordCascade(keyword.id);
+          showToast('关键词已删除', 'success');
+          await renderLibrary(context.container, context);
+        }
+      });
+    });
+    actions.append(edit, del);
     const meta = document.createElement('div');
     meta.className = 'keyword-meta';
     meta.textContent = levelLabel[keyword.level] ?? '入门';
@@ -239,7 +385,7 @@ function appendKeywordCards(host, keywords) {
     title.textContent = keyword.name;
     const summary = document.createElement('p');
     summary.textContent = keyword.summary || '还没有添加简介。';
-    card.append(meta, title, summary);
+    card.append(meta, title, summary, actions);
     host.append(card);
   }
 }
@@ -272,15 +418,15 @@ export async function renderLibrary(container, context) {
     selectedDomainId = id;
     selectedCategoryId = null;
     await renderLibrary(container, context);
-  });
+  }, context);
   appendCategoryButtons(container.querySelector('[data-list="categories"]'), categories, selectedCategoryId, async id => {
     selectedCategoryId = id;
     await renderLibrary(container, context);
-  });
+  }, context);
   if (!categories.length) {
     container.querySelector('[data-list="categories"]').innerHTML = '<div class="panel-empty"><p>还没有类目。</p></div>';
   }
-  appendKeywordCards(container.querySelector('[data-list="keywords"]'), keywords);
+  appendKeywordCards(container.querySelector('[data-list="keywords"]'), keywords, context, selectedDomainId, selectedCategoryId);
 
   container.querySelector('[data-action="add-category"]').addEventListener('click', () => openCategoryDialog(context, selectedDomainId));
   container.querySelector('[data-action="add-keyword"]').addEventListener('click', () => openKeywordDialog(context, selectedDomainId, selectedCategoryId));

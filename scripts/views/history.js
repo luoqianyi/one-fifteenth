@@ -146,20 +146,26 @@ export async function renderHistory(container, { repository }) {
       <div class="history-tip">提示：一次完整学习（输入 + 输出）会在此记录；在专注页结束时即可看到本页更新。</div>
     </section>`;
 
-  const groups = [...container.querySelectorAll('.history-group')];
-  const expanded = new Map();
+  // 最新数据挂在 container 上，供事件委托读取，避免闭包捕获过期数组
+  container._historyData = { sessions, recordings, keywords };
+  // 展开状态 Map 随每次渲染重置（旧 detail 元素已被 innerHTML 替换销毁）
+  container._historyExpanded = new Map();
 
-  container.addEventListener('click', event => {
+  // 点击委托：单例 handler，渲染前先移除再绑定，防止重复渲染累积监听器
+  const handleClick = container._historyClick ??= (event => {
     const button = event.target.closest('[data-action="expand-session"]');
     if (!button) return;
     const group = button.closest('.history-group');
     if (!group) return;
 
+    const { sessions, recordings, keywords } = container._historyData;
+    const expanded = container._historyExpanded;
     const session = sessions.find(item => item.id === button.dataset.id);
     const recording = recordings.find(item => item.sessionId === session?.id);
     const keyword = group._keyword || findName(keywords, session?.keywordId);
     const existing = group.querySelector('.session-detail');
     if (existing) {
+      if (existing._audioUrl) URL.revokeObjectURL(existing._audioUrl);
       existing.remove();
       expanded.delete(button.dataset.id);
       button.textContent = '详情';
@@ -168,16 +174,27 @@ export async function renderHistory(container, { repository }) {
 
     const detail = document.createElement('div');
     detail.className = 'session-detail';
+    let audioHtml = '';
+    let audioUrl = null;
+    if (recording && recording.blob && recording.blob.size) {
+      audioUrl = URL.createObjectURL(recording.blob);
+      audioHtml = `<audio class="recording-audio" controls preload="metadata" src="${audioUrl}"></audio>`;
+    }
     detail.innerHTML = `
       <div class="session-detail-block"><span>输入阶段</span><b>${formatDuration(session?.inputSeconds || 0)}</b></div>
       <div class="session-detail-block"><span>输出阶段</span><b>${formatDuration(session?.outputSeconds || 0)}</b></div>
-      <div class="session-detail-block">${recording ? `<span>复盘录音</span><b class="session-recording">已保存 · ${formatDuration(recording.duration || 0)}</b>` : '<span>复盘</span><b>未录制</b>'}</div>
+      <div class="session-detail-block">${recording
+        ? `<span>复盘录音</span><b class="session-recording">已保存 · ${formatDuration(recording.duration || 0)}</b>${audioHtml}`
+        : '<span>复盘</span><b>未录制</b>'}</div>
     `;
     group._keyword = keyword;
+    if (audioUrl) detail._audioUrl = audioUrl;
     group.append(detail);
     expanded.set(button.dataset.id, detail);
     button.textContent = '收起';
   });
+  container.removeEventListener('click', handleClick);
+  container.addEventListener('click', handleClick);
 
   const domainFilter = loadPreferences().activeDomainId;
   void domainFilter;

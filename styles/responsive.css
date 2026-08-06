@@ -62,6 +62,9 @@
   .history-stats { grid-template-columns: 1fr 1fr; }
   .history-group-meta { flex-wrap: wrap; }
   .session-detail { grid-template-columns: 1fr; }
+  .recording-audio { max-width: 100%; }
+  .library-list-item { flex-wrap: wrap; gap: 4px; }
+  .item-actions { flex-direction: row; justify-content: flex-start; margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

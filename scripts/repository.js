@@ -63,5 +63,46 @@ export const repository = {
       updatedAt: now
     };
     return this.put('keywords', keyword);
+  },
+
+  // 删除该会话关联的录音（若有）
+  async removeRecordingsForSession(sessionId) {
+    const recordings = await this.getByIndex('recordings', 'sessionId', sessionId);
+    for (const recording of recordings) {
+      await this.remove('recordings', recording.id);
+    }
+  },
+
+  // 删除关键词及其关联的学习记录
+  async removeKeywordCascade(keywordId) {
+    const sessions = await this.getByIndex('sessions', 'keywordId', keywordId);
+    for (const session of sessions) {
+      await this.removeRecordingsForSession(session.id);
+      await this.remove('sessions', session.id);
+    }
+    await this.remove('keywords', keywordId);
+  },
+
+  // 删除类目及其下所有关键词、学习记录
+  async removeCategoryCascade(categoryId) {
+    const keywords = await this.getByIndex('keywords', 'categoryId', categoryId);
+    for (const keyword of keywords) {
+      await this.removeKeywordCascade(keyword.id);
+    }
+    await this.remove('categories', categoryId);
+  },
+
+  // 删除领域及其下所有类目、关键词、学习记录
+  async removeDomainCascade(domainId) {
+    const categories = await this.getByIndex('categories', 'domainId', domainId);
+    for (const category of categories) {
+      await this.removeCategoryCascade(category.id);
+    }
+    const sessions = await this.getByIndex('sessions', 'domainId', domainId);
+    for (const session of sessions) {
+      await this.removeRecordingsForSession(session.id);
+      await this.remove('sessions', session.id);
+    }
+    await this.remove('domains', domainId);
   }
 };
